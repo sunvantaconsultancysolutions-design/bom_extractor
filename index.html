@@ -1,1 +1,347 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>placeholder</title></head><body></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BOM Extractor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:   #1F4E79;
+      --blue:   #2E75B6;
+      --sky:    #D6E4F0;
+      --gold:   #F4B942;
+      --ink:    #0D1B2A;
+      --mist:   #F0F5FA;
+      --white:  #FFFFFF;
+      --border: #C8DAED;
+      --red:    #C0392B;
+      --green:  #1A7A4A;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Mono', monospace;
+      background: var(--mist);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--navy);
+      padding: 0 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      border-bottom: 3px solid var(--gold);
+    }
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.25rem;
+      color: var(--white);
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: var(--gold);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+    .badge {
+      font-size: 0.68rem;
+      color: var(--sky);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    main {
+      flex: 1;
+      max-width: 780px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
+      color: var(--navy);
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+    }
+    h1 span { color: var(--blue); }
+    .subtitle {
+      font-size: 0.82rem;
+      color: #5a7a9a;
+      margin-top: 0.5rem;
+      line-height: 1.6;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      background: var(--white);
+      padding: 4rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--blue);
+      background: #EBF3FB;
+    }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+    .drop-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }
+    .drop-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--navy);
+      margin-bottom: 0.4rem;
+    }
+    .drop-sub { font-size: 0.75rem; color: #8aaac8; }
+    .file-chosen {
+      margin-top: 1.2rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--sky);
+      border-radius: 6px;
+      padding: 0.35rem 0.8rem;
+      font-size: 0.78rem;
+      color: var(--navy);
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--navy);
+      color: var(--white);
+      border: none;
+      border-radius: 10px;
+      padding: 1.1rem;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--blue); transform: translateY(-1px); }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    #status-box {
+      display: none;
+      border-radius: 10px;
+      padding: 1.1rem 1.3rem;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      border: 1.5px solid;
+    }
+    #status-box.loading { display:block; background: var(--sky); border-color: var(--blue); color: var(--navy); }
+    #status-box.error   { display:block; background: #FDF0EE; border-color: var(--red); color: var(--red); }
+    #status-box.success { display:block; background: #EAF7EF; border-color: var(--green); color: var(--green); }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--blue);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .step {
+      background: var(--white);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      background: var(--navy);
+      color: var(--white);
+      border-radius: 50%;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 0.5rem;
+    }
+    .step-text { font-size: 0.73rem; color: #5a7a9a; line-height: 1.4; }
+
+    .card-label {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--navy);
+      margin-bottom: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .card-label .dot { width: 6px; height: 6px; background: var(--gold); border-radius: 50%; display: inline-block; }
+
+    footer {
+      text-align: center;
+      font-size: 0.7rem;
+      color: #8aaac8;
+      padding: 1.2rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📐</div>
+    BOM Extractor
+  </div>
+  <span class="badge">Powered by Claude AI</span>
+</header>
+
+<main>
+  <div>
+    <h1>Extract <span>Bills of Materials</span><br>from Engineering Drawings</h1>
+    <p class="subtitle">Upload a PDF → Claude reads every BOM table → Download a formatted Excel file instantly.</p>
+  </div>
+
+  <!-- Drop zone -->
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".pdf" onchange="onFileChosen(this)" />
+    <span class="drop-icon">📄</span>
+    <div class="drop-title">Drop your engineering drawing PDF here</div>
+    <div class="drop-sub">or click to browse &nbsp;·&nbsp; max 50 MB</div>
+    <div id="file-name" style="display:none" class="file-chosen">
+      <span>📎</span><span id="file-label"></span>
+    </div>
+  </div>
+
+  <!-- Extract button -->
+  <button class="btn-primary" id="extract-btn" onclick="extract()" disabled>
+    ⚡ Extract BOM → Excel
+  </button>
+
+  <!-- Status -->
+  <div id="status-box"></div>
+
+  <!-- How it works -->
+  <div>
+    <div class="card-label"><span class="dot"></span> How it works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">Upload any engineering drawing PDF with BOM tables</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">Claude AI reads each page and extracts every row</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">Download a clean, formatted Excel file instantly</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>BOM Extractor &nbsp;·&nbsp; Built with FastAPI + Claude + openpyxl</footer>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  const extractBtn = document.getElementById('extract-btn');
+  const statusBox = document.getElementById('status-box');
+  let chosenFile = null;
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+
+  function onFileChosen(input) { if (input.files[0]) setFile(input.files[0]); }
+
+  function setFile(f) {
+    if (!f.name.toLowerCase().endsWith('.pdf')) { showStatus('error', '❌ Only PDF files are accepted.'); return; }
+    chosenFile = f;
+    document.getElementById('file-label').textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)';
+    document.getElementById('file-name').style.display = 'inline-flex';
+    extractBtn.disabled = false;
+    clearStatus();
+  }
+
+  function showStatus(type, msg) { statusBox.className = type; statusBox.innerHTML = msg; statusBox.style.display = 'block'; }
+  function clearStatus() { statusBox.style.display = 'none'; statusBox.className = ''; }
+
+  async function extract() {
+    if (!chosenFile) return;
+    extractBtn.disabled = true;
+    showStatus('loading', '<span class="spinner"></span> Uploading and analysing PDF pages with Claude… this may take a minute.');
+
+    const fd = new FormData();
+    fd.append('file', chosenFile);
+
+    try {
+      const res = await fetch('/api/extract-bom', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        showStatus('error', '❌ ' + (err.detail || 'Unknown error'));
+        extractBtn.disabled = false;
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      a.download = match ? match[1] : 'BOM.xlsx';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showStatus('success', '✅ Done! Your Excel file is downloading.');
+    } catch (e) {
+      showStatus('error', '❌ Network error: ' + e.message);
+    } finally {
+      extractBtn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
