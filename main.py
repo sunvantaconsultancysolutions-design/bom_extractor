@@ -1,3 +1,4 @@
+
 """
 BOM Extractor – Vercel-ready FastAPI app (FIXED VERSION)
 Entrypoint: main.py  (Vercel auto-detects FastAPI here)
@@ -365,7 +366,14 @@ async def extract_page(
         )
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        import httpx
+        client = anthropic.Anthropic(
+            api_key=api_key,
+            http_client=httpx.Client(
+                timeout=httpx.Timeout(55.0),
+                transport=httpx.HTTPTransport(retries=1)
+            )
+        )
         result = extract_bom_from_image(client, payload.page_num, payload.image_data, payload.media_type)
         return result
     except json.JSONDecodeError as e:
