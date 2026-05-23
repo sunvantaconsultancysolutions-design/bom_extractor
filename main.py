@@ -1,6 +1,12 @@
 """
 BOM Extractor – Vercel-ready FastAPI app
 Entrypoint: main.py  (Vercel auto-detects FastAPI here)
+
+Architecture: Page-by-page processing
+- Browser renders PDF pages to JPEG using PDF.js (client-side)
+- Each page image is sent individually to /api/extract-page (~200-500 KB each)
+- Collected BOM sections are sent to /api/build-excel to generate the workbook
+- This avoids Vercel's 4.5 MB request body size limit entirely
 """
 
 import base64
@@ -11,17 +17,16 @@ import traceback
 from pathlib import Path
 from typing import Optional
 
-import fitz  # PyMuPDF
 import openpyxl
 import anthropic
-from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from pydantic import BaseModel
 
 # ─── App ──────────────────────────────────────────────────────────────────────
-app = FastAPI(title="BOM Extractor", version="1.0.0")
+app = FastAPI(title="BOM Extractor", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,7 +36,6 @@ app.add_middleware(
 )
 
 # ─── Favicon (avoid 404) ──────────────────────────────────────────────────────
-# Minimal 1x1 transparent ICO to prevent browser 404 errors
 _FAVICON_ICO = base64.b64decode(
     "AAABAAEAAQEAAAEAGAAwAAAAFgAAACgAAAABAAAAAgAAAAEAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP8AAAA="
 )
@@ -84,21 +88,7 @@ Rules:
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-def pdf_to_images(pdf_bytes: bytes, dpi: int = 150) -> list[tuple[int, bytes]]:
-    """Convert PDF pages to JPEG images. DPI=150 balances quality vs payload size."""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    images = []
-    for i, page in enumerate(doc):
-        mat = fitz.Matrix(dpi / 72, dpi / 72)
-        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
-        # Use quality=80 to reduce JPEG size while keeping text readable
-        images.append((i + 1, pix.tobytes(output="jpeg")))
-    doc.close()
-    return images
-
-
-def extract_bom_from_page(client: anthropic.Anthropic, page_num: int, jpeg_bytes: bytes) -> dict:
-    b64 = base64.standard_b64encode(jpeg_bytes).decode()
+def extract_bom_from_image(client: anthropic.Anthropic, page_num: int, image_b64: str, media_type: str = "image/jpeg") -> dict:
     msg = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=4096,
@@ -106,7 +96,7 @@ def extract_bom_from_page(client: anthropic.Anthropic, page_num: int, jpeg_bytes
         messages=[{
             "role": "user",
             "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
                 {"type": "text", "text": f"Extract all BOM tables from this engineering drawing page (page {page_num})."},
             ],
         }],
@@ -304,90 +294,58 @@ def health():
     return {"status": "ok"}
 
 
-def _process_pdf(pdf_bytes: bytes, filename: str, api_key: str) -> StreamingResponse:
-    """Shared logic for both upload endpoints."""
+class PageExtractRequest(BaseModel):
+    """Single page image sent as base64 for BOM extraction."""
+    page_num: int
+    image_data: str      # base64-encoded JPEG/PNG
+    media_type: str = "image/jpeg"
+
+
+@app.post("/api/extract-page")
+async def extract_page(
+    payload: PageExtractRequest,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """Extract BOM from a single page image. Called once per page from the browser.
+    Each request is ~200-500 KB, well within Vercel's 4.5 MB body limit.
+    """
+    api_key = x_api_key or os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Anthropic API key required.")
+
     try:
-        pages = pdf_to_images(pdf_bytes, dpi=150)
+        client = anthropic.Anthropic(api_key=api_key)
+        result = extract_bom_from_image(client, payload.page_num, payload.image_data, payload.media_type)
+        return result
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=422, detail=f"Claude returned invalid JSON for page {payload.page_num}: {e}")
+    except anthropic.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic API error on page {payload.page_num}: {e}")
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Could not read PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Page {payload.page_num} processing failed: {e}")
 
-    client = anthropic.Anthropic(api_key=api_key)
-    all_sections: list[dict] = []
-    errors: list[str] = []
 
-    for page_num, jpeg_bytes in pages:
-        try:
-            result = extract_bom_from_page(client, page_num, jpeg_bytes)
-            if result.get("has_bom"):
-                all_sections.extend(result.get("sections", []))
-        except Exception as e:
-            errors.append(f"Page {page_num}: {e}")
+class BuildExcelRequest(BaseModel):
+    """All collected BOM sections + filename to build the Excel workbook."""
+    filename: str
+    sections: list[dict]
 
-    if not all_sections:
-        raise HTTPException(status_code=422,
-            detail=f"No BOM tables found. Errors: {'; '.join(errors) or 'None'}")
+
+@app.post("/api/build-excel")
+async def build_excel_endpoint(payload: BuildExcelRequest):
+    """Build Excel from collected BOM sections. Called once after all pages are processed."""
+    if not payload.sections:
+        raise HTTPException(status_code=422, detail="No BOM sections provided.")
 
     try:
-        xlsx_bytes = build_excel(all_sections, filename)
+        xlsx_bytes = build_excel(payload.sections, payload.filename)
     except Exception as e:
         raise HTTPException(status_code=500,
             detail=f"Excel build failed: {e}\n{traceback.format_exc()}")
 
-    stem = Path(filename).stem
+    stem = Path(payload.filename).stem
     return StreamingResponse(
         io.BytesIO(xlsx_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{stem}_BOM.xlsx"'},
     )
-
-
-@app.post("/api/extract-bom")
-async def extract_bom(
-    file: UploadFile = File(...),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
-):
-    api_key = x_api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Anthropic API key required.")
-
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
-    pdf_bytes = await file.read()
-    if len(pdf_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (max 50 MB).")
-
-    return _process_pdf(pdf_bytes, file.filename, api_key)
-
-
-class Base64Upload(BaseModel):
-    """Accepts PDF as base64 string to bypass Vercel's multipart body limit."""
-    filename: str
-    data: str  # base64-encoded PDF bytes
-    api_key: Optional[str] = None
-
-
-@app.post("/api/extract-bom-b64")
-async def extract_bom_b64(
-    payload: Base64Upload,
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
-):
-    """Fallback endpoint: accepts base64-encoded PDF in JSON body.
-    This avoids Vercel's multipart form-data body size limit.
-    """
-    api_key = payload.api_key or x_api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Anthropic API key required.")
-
-    if not payload.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
-    try:
-        pdf_bytes = base64.b64decode(payload.data)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid base64 data.")
-
-    if len(pdf_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (max 50 MB).")
-
-    return _process_pdf(pdf_bytes, payload.filename, api_key)

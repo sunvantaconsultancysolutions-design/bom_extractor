@@ -6,6 +6,8 @@
   <title>BOM Extractor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- PDF.js for client-side PDF rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
   <style>
     :root {
       --navy:   #1F4E79;
@@ -176,6 +178,32 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Progress bar */
+    .progress-container {
+      display: none;
+      margin-top: 0.8rem;
+    }
+    .progress-container.visible { display: block; }
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: #e0e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--gold));
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-text {
+      font-size: 0.72rem;
+      color: #5a7a9a;
+      margin-top: 0.3rem;
+    }
+
     .steps {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -257,7 +285,15 @@
   </button>
 
   <!-- Status -->
-  <div id="status-box"></div>
+  <div id="status-box">
+    <div id="status-text"></div>
+    <div class="progress-container" id="progress-container">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
+  </div>
 
   <!-- How it works -->
   <div>
@@ -281,12 +317,22 @@
 
 <footer>BOM Extractor &nbsp;·&nbsp; Built with FastAPI + Claude + openpyxl</footer>
 
-<script>
+<script type="module">
+  // ─── PDF.js setup ──────────────────────────────────────────────────────────
+  const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+
+  // ─── DOM refs ──────────────────────────────────────────────────────────────
   const dropZone = document.getElementById('drop-zone');
   const extractBtn = document.getElementById('extract-btn');
   const statusBox = document.getElementById('status-box');
+  const statusText = document.getElementById('status-text');
+  const progressContainer = document.getElementById('progress-container');
+  const progressFill = document.getElementById('progress-fill');
+  const progressTextEl = document.getElementById('progress-text');
   let chosenFile = null;
 
+  // ─── Drag & drop ──────────────────────────────────────────────────────────
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => {
@@ -295,7 +341,8 @@
     if (f) setFile(f);
   });
 
-  function onFileChosen(input) { if (input.files[0]) setFile(input.files[0]); }
+  // ─── File selection ────────────────────────────────────────────────────────
+  window.onFileChosen = function(input) { if (input.files[0]) setFile(input.files[0]); };
 
   function setFile(f) {
     if (!f.name.toLowerCase().endsWith('.pdf')) { showStatus('error', '❌ Only PDF files are accepted.'); return; }
@@ -306,82 +353,210 @@
     clearStatus();
   }
 
-  function showStatus(type, msg) { statusBox.className = type; statusBox.innerHTML = msg; statusBox.style.display = 'block'; }
-  function clearStatus() { statusBox.style.display = 'none'; statusBox.className = ''; }
+  function showStatus(type, msg) {
+    statusBox.className = type;
+    statusText.innerHTML = msg;
+    statusBox.style.display = 'block';
+    if (type !== 'loading') {
+      progressContainer.classList.remove('visible');
+    }
+  }
+  function clearStatus() { statusBox.style.display = 'none'; statusBox.className = ''; progressContainer.classList.remove('visible'); }
 
-  async function extract() {
+  function showProgress(current, total, pageMsg) {
+    progressContainer.classList.add('visible');
+    const pct = Math.round((current / total) * 100);
+    progressFill.style.width = pct + '%';
+    progressTextEl.textContent = pageMsg || `Page ${current} of ${total}`;
+  }
+
+  // ─── Render a single PDF page to JPEG base64 ──────────────────────────────
+  async function renderPageToBase64(pdfDoc, pageNum, scale = 2.0) {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // Try quality 0.85, but if the base64 is too large (>3MB), reduce quality
+    let quality = 0.85;
+    let dataUrl = canvas.toDataURL('image/jpeg', quality);
+    let b64 = dataUrl.split(',')[1];
+    // base64 is ~4/3 of binary, so 3MB base64 ≈ 2.25MB binary. Keep under Vercel's 4.5MB body limit.
+    while (b64.length > 3 * 1024 * 1024 && quality > 0.4) {
+      quality -= 0.15;
+      dataUrl = canvas.toDataURL('image/jpeg', quality);
+      b64 = dataUrl.split(',')[1];
+    }
+    // If still too large, re-render at a smaller scale
+    if (b64.length > 3 * 1024 * 1024 && scale > 1.0) {
+      return renderPageToBase64(pdfDoc, pageNum, scale * 0.7);
+    }
+    return b64;
+  }
+
+  // ─── Fetch with timeout and retry ─────────────────────────────────────────
+  async function fetchWithRetry(url, options, { retries = 2, timeoutMs = 120000 } = {}) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) return res;
+        // On server error (5xx), retry
+        if (res.status >= 500 && attempt < retries) {
+          const wait = 1000 * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        // Return the failed response for caller to handle
+        return res;
+      } catch (e) {
+        clearTimeout(timer);
+        if (attempt < retries && (e.name === 'AbortError' || e.name === 'TypeError')) {
+          const wait = 1000 * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  // ─── Extract error detail from a failed response ──────────────────────────
+  async function getErrorDetail(res) {
+    try {
+      const data = await res.json();
+      return data.detail || data.message || data.error || JSON.stringify(data);
+    } catch {
+      try {
+        const text = await res.text();
+        // Vercel often returns HTML error pages; extract useful bits
+        if (text.includes('FUNCTION_INVOCATION_TIMEOUT')) return 'Server function timed out (Vercel limit). Try a smaller PDF or upgrade your plan.';
+        if (text.includes('BODY_LIMIT')) return 'Request too large for Vercel (4.5MB limit). Page image is too big.';
+        if (text.length < 200) return text || `HTTP ${res.status}`;
+        return `HTTP ${res.status} — server returned a non-JSON error`;
+      } catch {
+        return `HTTP ${res.status} ${res.statusText || 'error'}`;
+      }
+    }
+  }
+
+  // ─── Main extraction flow ─────────────────────────────────────────────────
+  window.extract = async function() {
     if (!chosenFile) return;
     extractBtn.disabled = true;
-    showStatus('loading', '<span class="spinner"></span> Uploading and analysing PDF pages with Claude… this may take a minute.');
-
-    const fd = new FormData();
-    fd.append('file', chosenFile);
+    showStatus('loading', '<span class="spinner"></span> Loading PDF…');
 
     try {
-      // First attempt: standard multipart upload
-      let res = await fetch('/api/extract-bom', { method: 'POST', body: fd });
+      // 1. Load PDF in browser with PDF.js
+      const arrayBuffer = await chosenFile.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdfDoc.numPages;
 
-      // If 413 (Vercel body limit), retry with base64 JSON endpoint
-      if (res.status === 413) {
-        showStatus('loading', '<span class="spinner"></span> File is large — retrying with alternate upload method…');
-        const b64data = await fileToBase64(chosenFile);
-        res = await fetch('/api/extract-bom-b64', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: chosenFile.name, data: b64data }),
-        });
+      showStatus('loading', `<span class="spinner"></span> PDF loaded — ${totalPages} page${totalPages > 1 ? 's' : ''} found. Analysing with Claude…`);
+      showProgress(0, totalPages, `Starting analysis of ${totalPages} pages…`);
+
+      // 2. Process each page one-by-one
+      const allSections = [];
+      const errors = [];
+
+      for (let i = 1; i <= totalPages; i++) {
+        showProgress(i, totalPages, `Analysing page ${i} of ${totalPages}…`);
+
+        // Render page to JPEG in browser
+        let imageB64;
+        try {
+          imageB64 = await renderPageToBase64(pdfDoc, i);
+        } catch (renderErr) {
+          errors.push(`Page ${i}: Failed to render — ${renderErr.message}`);
+          continue;
+        }
+
+        // Send to server for Claude extraction (with retry + timeout)
+        try {
+          const res = await fetchWithRetry('/api/extract-page', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              page_num: i,
+              image_data: imageB64,
+              media_type: 'image/jpeg'
+            }),
+          });
+
+          if (!res.ok) {
+            const detail = await getErrorDetail(res);
+            errors.push(`Page ${i}: ${detail}`);
+            continue;
+          }
+
+          const result = await res.json();
+          if (result.has_bom && result.sections) {
+            allSections.push(...result.sections);
+          }
+        } catch (e) {
+          const msg = e.name === 'AbortError' ? 'Request timed out after retries' : (e.message || 'Network error');
+          errors.push(`Page ${i}: ${msg}`);
+        }
       }
 
-      if (!res.ok) {
-        let detail = 'Unknown error';
-        try {
-          const err = await res.json();
-          detail = err.detail || err.message || detail;
-        } catch (_) {
-          // Vercel sometimes returns HTML error pages
-          const text = await res.text().catch(() => '');
-          if (res.status === 413) {
-            detail = 'File too large for server. Vercel free plan limits uploads to ~4.5 MB. Try a smaller PDF or upgrade to Vercel Pro.';
-          } else if (res.status === 504) {
-            detail = 'Request timed out. The PDF has too many pages. Try splitting it into smaller files.';
-          } else {
-            detail = `Server error (${res.status}): ${text.slice(0, 200) || res.statusText}`;
-          }
-        }
-        showStatus('error', '❌ ' + detail);
+      // 3. Check if we found any BOM data
+      if (allSections.length === 0) {
+        const errMsg = errors.length > 0
+          ? `No BOM tables found. Errors: ${errors.join('; ')}`
+          : 'No BOM tables were found in any page of this PDF.';
+        showStatus('error', '❌ ' + errMsg);
         extractBtn.disabled = false;
         return;
       }
-      const blob = await res.blob();
+
+      // 4. Build Excel file on server
+      showStatus('loading', '<span class="spinner"></span> Building Excel workbook…');
+      showProgress(totalPages, totalPages, 'Generating Excel file…');
+
+      const excelRes = await fetchWithRetry('/api/build-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: chosenFile.name,
+          sections: allSections,
+        }),
+      });
+
+      if (!excelRes.ok) {
+        const detail = await getErrorDetail(excelRes);
+        showStatus('error', '❌ Excel build failed: ' + detail);
+        extractBtn.disabled = false;
+        return;
+      }
+
+      // 5. Download the Excel file
+      const blob = await excelRes.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const cd = res.headers.get('Content-Disposition') || '';
+      const cd = excelRes.headers.get('Content-Disposition') || '';
       const match = cd.match(/filename="?([^"]+)"?/);
       a.download = match ? match[1] : 'BOM.xlsx';
       document.body.appendChild(a); a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showStatus('success', '✅ Done! Your Excel file is downloading.');
+
+      const warnMsg = errors.length > 0
+        ? `<br><span style="font-size:0.75rem;color:#8a6d00;">⚠️ ${errors.length} page(s) had errors and were skipped.</span>`
+        : '';
+      showStatus('success', `✅ Done! Extracted ${allSections.length} BOM section${allSections.length > 1 ? 's' : ''}. Your Excel file is downloading.${warnMsg}`);
+
     } catch (e) {
-      showStatus('error', '❌ Network error: ' + e.message);
+      const errMsg = e.name === 'AbortError' ? 'Request timed out. The server may be overloaded — try again in a moment.' : (e.message || 'An unexpected error occurred');
+      showStatus('error', '❌ ' + errMsg);
     } finally {
       extractBtn.disabled = false;
     }
-  }
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        // Remove the "data:...;base64," prefix
-        const result = reader.result.split(',')[1];
-        resolve(result);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
+  };
 </script>
 </body>
 </html>
