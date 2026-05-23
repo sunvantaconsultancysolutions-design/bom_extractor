@@ -12,20 +12,12 @@
     }
   ],
   "routes": [
-    {
-      "src": "/favicon.ico",
-      "dest": "main.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "main.py"
-    }
+    { "src": "/favicon.ico", "dest": "main.py" },
+    { "src": "/api/(.*)",    "dest": "main.py" },
+    { "src": "/(.*)",        "dest": "main.py" }
   ],
   "env": {
-    "PYTHONUNBUFFERED": "1"
+    "PYTHONUNBUFFERED": "1",
+    "ANTHROPIC_API_KEY": "@anthropic_api_key"
   }
 }
