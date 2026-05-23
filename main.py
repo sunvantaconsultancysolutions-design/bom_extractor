@@ -1,4 +1,3 @@
-
 """
 BOM Extractor – Vercel-ready FastAPI app (FIXED VERSION)
 Entrypoint: main.py  (Vercel auto-detects FastAPI here)
@@ -65,6 +64,13 @@ def health():
     }
 
 # ─── Serve frontend ───────────────────────────────────────────────────────────
+@app.get("/api/get-key", include_in_schema=False)
+def get_key():
+    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=404, detail="API key not configured")
+    return {"key": key}
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
     """Serve the single-page frontend."""
@@ -366,14 +372,7 @@ async def extract_page(
         )
 
     try:
-        import httpx
-        client = anthropic.Anthropic(
-            api_key=api_key,
-            http_client=httpx.Client(
-                timeout=httpx.Timeout(55.0),
-                transport=httpx.HTTPTransport(retries=1)
-            )
-        )
+        client = anthropic.Anthropic(api_key=api_key)
         result = extract_bom_from_image(client, payload.page_num, payload.image_data, payload.media_type)
         return result
     except json.JSONDecodeError as e:
