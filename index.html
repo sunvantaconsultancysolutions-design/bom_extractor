@@ -3,752 +3,821 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <title>BOM Extractor</title>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap"
-    rel="stylesheet"
-  />
-
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    :root{
-      --navy:#1F4E79;
-      --blue:#2E75B6;
-      --sky:#D6E4F0;
-      --gold:#F4B942;
-      --ink:#0D1B2A;
-      --mist:#F0F5FA;
-      --white:#FFFFFF;
-      --border:#C8DAED;
-      --red:#C0392B;
-      --green:#1A7A4A;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0e14;
+      --panel:     #111620;
+      --border:    #1e2535;
+      --accent:    #3b82f6;
+      --accent2:   #06b6d4;
+      --ok:        #22c55e;
+      --warn:      #f59e0b;
+      --err:       #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'Syne', sans-serif;
     }
 
-    *{
-      box-sizing:border-box;
-      margin:0;
-      padding:0;
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
-    body{
-      font-family:'DM Mono', monospace;
-      background:var(--mist);
-      color:var(--ink);
-      min-height:100vh;
-      display:flex;
-      flex-direction:column;
+    /* ── Header ── */
+    header {
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--panel);
+    }
+    .logo-mark {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 800; color: #fff;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 1.15rem; font-weight: 700; letter-spacing: 0.02em;
+    }
+    header span {
+      font-size: 0.72rem; color: var(--muted); font-family: var(--mono);
+      margin-left: auto;
     }
 
-    header{
-      background:var(--navy);
-      height:64px;
-      padding:0 2rem;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      border-bottom:3px solid var(--gold);
+    /* ── Layout ── */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 0;
+    }
+    @media (max-width: 820px) {
+      .main { grid-template-columns: 1fr; }
     }
 
-    .logo{
-      font-family:'Syne', sans-serif;
-      font-weight:800;
-      color:white;
-      display:flex;
-      align-items:center;
-      gap:0.7rem;
-      font-size:1.2rem;
+    /* ── Sidebar ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
     }
 
-    .logo-icon{
-      width:34px;
-      height:34px;
-      border-radius:8px;
-      background:var(--gold);
-      display:flex;
-      align-items:center;
-      justify-content:center;
+    .section-label {
+      font-size: 0.68rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
     }
 
-    .badge{
-      font-size:0.72rem;
-      color:var(--sky);
-      letter-spacing:0.08em;
-      text-transform:uppercase;
+    /* Drop zone */
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.06);
+    }
+    .drop-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+    .drop-icon { font-size: 2rem; margin-bottom: 10px; }
+    .drop-zone p { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+    .drop-zone strong { color: var(--text); display: block; margin-bottom: 4px; }
+
+    /* File info */
+    .file-info {
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.25);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: none;
+    }
+    .file-info.visible { display: block; }
+    .file-name {
+      font-size: 0.82rem; font-weight: 600; word-break: break-all;
+      color: var(--accent2);
+    }
+    .file-meta {
+      font-size: 0.72rem; color: var(--muted); font-family: var(--mono); margin-top: 4px;
     }
 
-    main{
-      width:100%;
-      max-width:820px;
-      margin:0 auto;
-      padding:3rem 1.2rem 4rem;
-      display:flex;
-      flex-direction:column;
-      gap:2rem;
-      flex:1;
+    /* Page range */
+    .range-row {
+      display: flex; gap: 12px; align-items: flex-end;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .field label { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); }
+    .field input {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 9px 12px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--accent); }
+
+    /* Buttons */
+    .btn {
+      padding: 11px 20px;
+      border-radius: 8px;
+      border: none;
+      font-family: var(--sans);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-success {
+      background: var(--ok);
+      color: #fff;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-ghost {
+      background: var(--border);
+      color: var(--text);
     }
 
-    h1{
-      font-family:'Syne', sans-serif;
-      font-size:clamp(2rem,4vw,3rem);
-      line-height:1.1;
-      color:var(--navy);
-      letter-spacing:-0.04em;
+    /* Status pills */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-family: var(--mono);
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.05);
+    }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+    }
+    .dot.ok  { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+    .dot.err { background: var(--err); box-shadow: 0 0 6px var(--err); }
+    .dot.spin {
+      background: var(--accent);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Main panel ── */
+    .content {
+      padding: 28px 32px;
+      overflow-y: auto;
     }
 
-    h1 span{
-      color:var(--blue);
+    /* Progress log */
+    .log-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      line-height: 1.7;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      margin-bottom: 24px;
+    }
+    .log-box.visible { display: block; }
+    .log-line { display: flex; gap: 10px; }
+    .log-line .ts { color: var(--muted); flex-shrink: 0; }
+    .log-line.ok  .msg { color: var(--ok); }
+    .log-line.err .msg { color: var(--err); }
+    .log-line.info .msg { color: var(--accent2); }
+
+    /* Results */
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .results-header h2 {
+      font-size: 1rem; font-weight: 700;
     }
 
-    .subtitle{
-      margin-top:0.7rem;
-      font-size:0.85rem;
-      color:#5b7692;
-      line-height:1.7;
+    .bom-section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .bom-section-header {
+      background: rgba(59,130,246,0.12);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .bom-section-header h3 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent2);
+    }
+    .bom-section-header .unit-tag {
+      font-size: 0.68rem;
+      font-family: var(--mono);
+      color: var(--muted);
     }
 
-    .drop-zone{
-      position:relative;
-      background:white;
-      border:2px dashed var(--border);
-      border-radius:16px;
-      padding:4rem 2rem;
-      text-align:center;
-      transition:0.25s;
-      cursor:pointer;
+    .bom-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    thead tr { background: rgba(255,255,255,0.03); }
+    th {
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 0.68rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(30,37,53,0.8);
+      font-family: var(--mono);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.025); }
+    .num { text-align: right; color: var(--accent2); }
+    .mark-chip {
+      display: inline-block;
+      background: rgba(59,130,246,0.15);
+      color: var(--accent);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 0.72rem;
     }
 
-    .drop-zone:hover,
-    .drop-zone.drag-over{
-      border-color:var(--blue);
-      background:#edf5fd;
+    .bom-totals {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      background: rgba(0,0,0,0.2);
+    }
+    .total-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .total-item .tl { font-size: 0.65rem; font-family: var(--mono); color: var(--muted); }
+    .total-item .tv { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .total-item.grand .tv { color: var(--ok); }
+
+    /* Sub-table label */
+    .sub-label {
+      padding: 8px 14px 4px;
+      font-size: 0.65rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-top: 1px solid var(--border);
     }
 
-    .drop-zone input{
-      position:absolute;
-      inset:0;
-      opacity:0;
-      width:100%;
-      height:100%;
-      cursor:pointer;
+    /* Empty / error states */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 1rem; color: var(--text); margin-bottom: 8px; }
+    .empty-state p { font-size: 0.82rem; line-height: 1.6; }
+
+    .error-list {
+      background: rgba(239,68,68,0.07);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .error-list h4 { font-size: 0.78rem; color: var(--err); margin-bottom: 8px; }
+    .error-list li {
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      margin-left: 16px;
+      line-height: 1.7;
     }
 
-    .drop-icon{
-      font-size:3rem;
-      display:block;
-      margin-bottom:1rem;
-    }
-
-    .drop-title{
-      font-family:'Syne', sans-serif;
-      font-size:1.15rem;
-      font-weight:700;
-      color:var(--navy);
-      margin-bottom:0.5rem;
-    }
-
-    .drop-sub{
-      font-size:0.75rem;
-      color:#87a3be;
-    }
-
-    .file-pill{
-      display:none;
-      margin-top:1.3rem;
-      background:var(--sky);
-      color:var(--navy);
-      border-radius:999px;
-      padding:0.45rem 1rem;
-      font-size:0.75rem;
-      font-weight:600;
-      align-items:center;
-      justify-content:center;
-      gap:0.5rem;
-    }
-
-    .btn{
-      width:100%;
-      border:none;
-      border-radius:12px;
-      background:var(--navy);
-      color:white;
-      padding:1.1rem;
-      font-family:'Syne', sans-serif;
-      font-size:1rem;
-      font-weight:700;
-      cursor:pointer;
-      transition:0.2s;
-    }
-
-    .btn:hover:not(:disabled){
-      background:var(--blue);
-      transform:translateY(-1px);
-    }
-
-    .btn:disabled{
-      opacity:0.45;
-      cursor:not-allowed;
-    }
-
-    #status-box{
-      display:none;
-      border-radius:12px;
-      padding:1.1rem 1.2rem;
-      font-size:0.82rem;
-      line-height:1.7;
-      border:1px solid;
-      max-height:260px;
-      overflow-y:auto;
-    }
-
-    #status-box.loading{
-      display:block;
-      background:#edf5fd;
-      border-color:var(--blue);
-      color:var(--navy);
-    }
-
-    #status-box.error{
-      display:block;
-      background:#fff1ef;
-      border-color:var(--red);
-      color:var(--red);
-    }
-
-    #status-box.success{
-      display:block;
-      background:#ebf8ef;
-      border-color:var(--green);
-      color:var(--green);
-    }
-
-    .spinner{
-      width:14px;
-      height:14px;
-      display:inline-block;
-      border:2px solid var(--blue);
-      border-top-color:transparent;
-      border-radius:50%;
-      animation:spin 0.7s linear infinite;
-      vertical-align:middle;
-      margin-right:0.4rem;
-    }
-
-    @keyframes spin{
-      to{
-        transform:rotate(360deg);
-      }
-    }
-
-    .progress-wrap{
-      display:none;
-      margin-top:1rem;
-    }
-
-    .progress-wrap.visible{
-      display:block;
-    }
-
-    .progress-bg{
-      width:100%;
-      height:8px;
-      border-radius:999px;
-      background:#dbe6f2;
-      overflow:hidden;
-    }
-
-    .progress-fill{
-      height:100%;
-      width:0%;
-      background:linear-gradient(90deg,var(--blue),var(--gold));
-      transition:0.3s;
-    }
-
-    .progress-text{
-      margin-top:0.4rem;
-      font-size:0.72rem;
-      color:#6683a0;
-    }
-
-    .steps{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:1rem;
-    }
-
-    .step{
-      background:white;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:1rem;
-      text-align:center;
-    }
-
-    .step-num{
-      width:30px;
-      height:30px;
-      border-radius:50%;
-      background:var(--navy);
-      color:white;
-      margin:0 auto 0.7rem;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:700;
-    }
-
-    .step-text{
-      font-size:0.75rem;
-      color:#6984a0;
-      line-height:1.5;
-    }
-
-    footer{
-      text-align:center;
-      padding:1.2rem;
-      font-size:0.72rem;
-      color:#8ba7c2;
-      border-top:1px solid var(--border);
-    }
-
-    @media(max-width:640px){
-      .steps{
-        grid-template-columns:1fr;
-      }
-    }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   </style>
 </head>
-
 <body>
 
 <header>
-  <div class="logo">
-    <div class="logo-icon">📋</div>
-    <div>BOM <span style="color:var(--gold)">Extractor</span></div>
-  </div>
-
-  <div class="badge">Powered by Claude AI</div>
+  <div class="logo-mark">B</div>
+  <h1>BOM Extractor</h1>
+  <span>v4.0 · Steel Tower Drawing Parser</span>
 </header>
 
-<main>
+<div class="main">
 
-  <div>
-    <h1>
-      Extract <span>Bills of Materials</span><br>
-      from Engineering Drawings
-    </h1>
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
 
-    <p class="subtitle">
-      Upload engineering drawing PDFs → Claude AI extracts BOM tables →
-      Download clean Excel sheets instantly.
-    </p>
-  </div>
-
-  <div class="drop-zone" id="drop-zone">
-
-    <input
-      type="file"
-      id="file-input"
-      accept=".pdf"
-      onchange="onFileChosen(this)"
-    />
-
-    <span class="drop-icon">📄</span>
-
-    <div class="drop-title">
-      Drop your PDF here
-    </div>
-
-    <div class="drop-sub">
-      or click to browse · max 50MB
-    </div>
-
-    <div class="file-pill" id="file-pill">
-      📎 <span id="file-label"></span>
-    </div>
-  </div>
-
-  <button
-    class="btn"
-    id="extract-btn"
-    onclick="extract()"
-    disabled
-  >
-    ⚡ Extract BOM → Excel
-  </button>
-
-  <div id="status-box">
-
-    <div id="status-text"></div>
-
-    <div class="progress-wrap" id="progress-wrap">
-
-      <div class="progress-bg">
-        <div class="progress-fill" id="progress-fill"></div>
-      </div>
-
-      <div class="progress-text" id="progress-text"></div>
-
-    </div>
-
-  </div>
-
-  <div class="steps">
-
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-text">
-        Upload engineering drawing PDF
+    <div>
+      <div class="section-label">Upload Drawing</div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".pdf" />
+        <div class="drop-icon">📄</div>
+        <strong>Drop PDF here</strong>
+        <p>or click to browse</p>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-text">
-        Claude reads every BOM table automatically
+    <div class="file-info" id="fileInfo">
+      <div class="file-name" id="fileName"></div>
+      <div class="file-meta" id="fileMeta"></div>
+    </div>
+
+    <div>
+      <div class="section-label">Page Range</div>
+      <div class="range-row">
+        <div class="field">
+          <label>From</label>
+          <input type="number" id="pageFrom" value="1" min="1" />
+        </div>
+        <div class="field">
+          <label>To</label>
+          <input type="number" id="pageTo" value="10" min="1" />
+        </div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-text">
-        Download formatted Excel workbook instantly
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-primary" id="extractBtn" disabled>
+        <span>⚡</span> Extract BOM
+      </button>
+      <button class="btn btn-success" id="downloadBtn" style="display:none">
+        <span>📥</span> Download Excel
+      </button>
+      <button class="btn btn-ghost" id="clearBtn" style="display:none">
+        ✕ Clear
+      </button>
+    </div>
+
+    <div>
+      <div class="section-label">Status</div>
+      <div id="statusPill" class="status-pill">
+        <div class="dot spin"></div>
+        <span>Checking API…</span>
       </div>
     </div>
 
-  </div>
+  </aside>
 
-</main>
+  <!-- ── Content ── -->
+  <main class="content">
 
-<footer>
-  BOM Extractor · FastAPI + Claude + openpyxl
-</footer>
+    <div class="log-box" id="logBox"></div>
 
-<script type="module">
+    <div id="resultsArea">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🏗️</div>
+        <h3>No extraction yet</h3>
+        <p>Upload a steel tower engineering drawing PDF<br/>and click <strong>Extract BOM</strong> to begin.</p>
+      </div>
+    </div>
 
-let pdfjsLib;
-let chosenFile = null;
+  </main>
+</div>
 
-try{
-  pdfjsLib = await import(
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs'
-  );
+<script>
+/* =========================================================
+   State
+   ========================================================= */
+let pdfFile = null;
+let allSections = [];
+let errors = [];
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+/* =========================================================
+   Elements
+   ========================================================= */
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const fileInfo   = document.getElementById('fileInfo');
+const fileName   = document.getElementById('fileName');
+const fileMeta   = document.getElementById('fileMeta');
+const pageFrom   = document.getElementById('pageFrom');
+const pageTo     = document.getElementById('pageTo');
+const extractBtn = document.getElementById('extractBtn');
+const downloadBtn= document.getElementById('downloadBtn');
+const clearBtn   = document.getElementById('clearBtn');
+const statusPill = document.getElementById('statusPill');
+const logBox     = document.getElementById('logBox');
+const resultsArea= document.getElementById('resultsArea');
+const emptyState = document.getElementById('emptyState');
 
-}catch(e){
-  console.error(e);
+/* =========================================================
+   Health check
+   ========================================================= */
+async function checkHealth() {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    if (d.api_key_configured && d.anthropic_reachable) {
+      setPill('ok', 'API Ready');
+    } else if (!d.api_key_configured) {
+      setPill('err', 'API key missing');
+    } else {
+      setPill('err', 'Cannot reach Anthropic');
+    }
+  } catch {
+    setPill('err', 'Server offline');
+  }
 }
 
-const dropZone = document.getElementById('drop-zone');
-const extractBtn = document.getElementById('extract-btn');
+function setPill(state, text) {
+  statusPill.innerHTML = `<div class="dot ${state}"></div><span>${text}</span>`;
+}
 
-const statusBox = document.getElementById('status-box');
-const statusText = document.getElementById('status-text');
+checkHealth();
 
-const progressWrap = document.getElementById('progress-wrap');
-const progressFill = document.getElementById('progress-fill');
-const progressText = document.getElementById('progress-text');
-
-dropZone.addEventListener('dragover', e=>{
+/* =========================================================
+   File handling
+   ========================================================= */
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
   e.preventDefault();
-  dropZone.classList.add('drag-over');
-});
-
-dropZone.addEventListener('dragleave', ()=>{
   dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') setFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
 });
 
-dropZone.addEventListener('drop', e=>{
-  e.preventDefault();
-
-  dropZone.classList.remove('drag-over');
-
-  if(e.dataTransfer.files[0]){
-    setFile(e.dataTransfer.files[0]);
-  }
-});
-
-window.onFileChosen = input=>{
-  if(input.files[0]){
-    setFile(input.files[0]);
-  }
-};
-
-function setFile(file){
-
-  if(!file.name.toLowerCase().endsWith('.pdf')){
-    showStatus('error', '❌ Only PDF files are supported.');
-    return;
-  }
-
-  chosenFile = file;
-
-  document.getElementById('file-label').textContent =
-    `${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
-
-  document.getElementById('file-pill').style.display = 'inline-flex';
-
+function setFile(f) {
+  pdfFile = f;
+  fileName.textContent = f.name;
+  fileMeta.textContent = `${(f.size / 1024 / 1024).toFixed(2)} MB`;
+  fileInfo.classList.add('visible');
   extractBtn.disabled = false;
-
-  clearStatus();
+  // Estimate pages
+  pageTo.value = Math.min(Math.max(Math.round(f.size / 80000), 5), 50);
 }
 
-function showStatus(type, message){
-
-  statusBox.className = type;
-  statusText.innerHTML = message;
-
-  statusBox.style.display = 'block';
-
-  if(type !== 'loading'){
-    progressWrap.classList.remove('visible');
-  }
+/* =========================================================
+   Logging
+   ========================================================= */
+function log(msg, type = 'info') {
+  logBox.classList.add('visible');
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
 }
 
-function clearStatus(){
-  statusBox.style.display = 'none';
-  statusBox.className = '';
-  progressWrap.classList.remove('visible');
-}
-
-function showProgress(current, total, text){
-
-  progressWrap.classList.add('visible');
-
-  const pct = Math.round((current / total) * 100);
-
-  progressFill.style.width = pct + '%';
-
-  progressText.textContent =
-    text || `Page ${current} of ${total}`;
-}
-
-async function renderPage(pdfDoc, pageNum, scale=1.5){
-
-  const page = await pdfDoc.getPage(pageNum);
-
-  const viewport = page.getViewport({ scale });
-
+/* =========================================================
+   PDF → images via canvas
+   ========================================================= */
+async function pdfPageToBase64(pdf, pageNum) {
+  const page = await pdf.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 2.0 });
   const canvas = document.createElement('canvas');
-
   canvas.width = viewport.width;
   canvas.height = viewport.height;
-
-  await page.render({
-    canvasContext: canvas.getContext('2d'),
-    viewport
-  }).promise;
-
-  let quality = 0.85;
-
-  let dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-  let b64 = dataUrl.split(',')[1];
-
-  while(
-    b64.length > 1.2 * 1024 * 1024 &&
-    quality > 0.35
-  ){
-    quality -= 0.1;
-
-    dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-    b64 = dataUrl.split(',')[1];
-  }
-
-  return b64;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  return dataUrl.split(',')[1];
 }
 
-async function extractPage(pageNum, imageB64){
+/* =========================================================
+   Extract
+   ========================================================= */
+extractBtn.addEventListener('click', async () => {
+  if (!pdfFile) return;
 
-  const response = await fetch('/api/extract-page', {
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json'
-    },
-    body:JSON.stringify({
-      page_num: pageNum,
-      image_data: imageB64,
-      media_type: 'image/jpeg'
-    })
-  });
-
-  if(!response.ok){
-
-    let detail = `HTTP ${response.status}`;
-
-    try{
-      const data = await response.json();
-      detail = data.detail || detail;
-    }catch{}
-
-    throw new Error(detail);
-  }
-
-  return response.json();
-}
-
-window.extract = async function(){
-
-  if(!chosenFile){
-    return;
-  }
-
-  if(!pdfjsLib?.getDocument){
-    showStatus(
-      'error',
-      '❌ PDF.js failed to load. Refresh page.'
-    );
-    return;
-  }
+  allSections = [];
+  errors = [];
+  logBox.innerHTML = '';
+  logBox.classList.add('visible');
+  resultsArea.innerHTML = '';
+  downloadBtn.style.display = 'none';
+  clearBtn.style.display = 'none';
 
   extractBtn.disabled = true;
+  setPill('spin', 'Extracting…');
+  log(`Loading PDF: ${pdfFile.name}`, 'info');
 
-  showStatus(
-    'loading',
-    '<span class="spinner"></span> Loading PDF...'
-  );
+  try {
+    // Load pdf.js from CDN
+    if (!window.pdfjsLib) {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
 
-  try{
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const totalPages = pdf.numPages;
 
-    const pdfDoc = await pdfjsLib.getDocument({
-      data: await chosenFile.arrayBuffer()
-    }).promise;
+    const from = Math.max(1, parseInt(pageFrom.value) || 1);
+    const to   = Math.min(totalPages, parseInt(pageTo.value) || totalPages);
 
-    const totalPages = pdfDoc.numPages;
+    log(`PDF loaded · ${totalPages} pages · processing pages ${from}–${to}`, 'info');
 
-    showStatus(
-      'loading',
-      `<span class="spinner"></span> Analysing ${totalPages} pages with Claude AI...`
-    );
+    for (let p = from; p <= to; p++) {
+      log(`Page ${p}/${to}: rendering…`);
+      let imgB64;
+      try {
+        imgB64 = await pdfPageToBase64(pdf, p);
+      } catch (e) {
+        const msg = `Render failed: ${e.message}`;
+        log(`Page ${p}: ❌ ${msg}`, 'err');
+        errors.push({ page: p, msg });
+        continue;
+      }
 
-    const allSections = [];
-    const errors = [];
+      log(`Page ${p}/${to}: sending to Claude…`);
+      try {
+        const res = await fetch('/api/extract-page', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page_num: p, image_data: imgB64, media_type: 'image/jpeg' }),
+        });
 
-    for(let i = 1; i <= totalPages; i++){
-
-      showProgress(
-        i,
-        totalPages,
-        `Processing page ${i} of ${totalPages}`
-      );
-
-      try{
-
-        const imageB64 = await renderPage(pdfDoc, i);
-
-        const result = await extractPage(i, imageB64);
-
-        if(result.has_bom && result.sections){
-          allSections.push(...result.sections);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || res.statusText);
         }
 
-      }catch(e){
+        const data = await res.json();
 
-        console.error(e);
-
-        errors.push(`Page ${i}: ${e.message}`);
+        if (data.has_bom && data.sections?.length) {
+          data.sections.forEach(s => { s._page = p; allSections.push(s); });
+          log(`Page ${p}: ✓ Found ${data.sections.length} BOM section(s)`, 'ok');
+        } else {
+          log(`Page ${p}: — No BOM`);
+        }
+      } catch (e) {
+        const msg = e.message;
+        log(`Page ${p}: ❌ ${msg}`, 'err');
+        errors.push({ page: p, msg });
       }
     }
 
-    if(allSections.length === 0){
+    renderResults();
 
-      showStatus(
-        'error',
-        '❌ No BOM tables found.' +
-        (
-          errors.length
-            ? `<br><br>Errors:<br>• ${errors.join('<br>• ')}`
-            : ''
-        )
-      );
-
-      extractBtn.disabled = false;
-
-      return;
-    }
-
-    showStatus(
-      'loading',
-      '<span class="spinner"></span> Building Excel workbook...'
-    );
-
-    const excelResponse = await fetch('/api/build-excel', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json'
-      },
-      body:JSON.stringify({
-        filename: chosenFile.name,
-        sections: allSections
-      })
-    });
-
-    if(!excelResponse.ok){
-
-      let detail = `HTTP ${excelResponse.status}`;
-
-      try{
-        const data = await excelResponse.json();
-        detail = data.detail || detail;
-      }catch{}
-
-      showStatus(
-        'error',
-        `❌ Excel build failed: ${detail}`
-      );
-
-      extractBtn.disabled = false;
-
-      return;
-    }
-
-    const blob = await excelResponse.blob();
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-
-    a.href = url;
-
-    const cd =
-      excelResponse.headers.get('Content-Disposition') || '';
-
-    const match = cd.match(/filename="?([^"]+)"?/);
-
-    a.download = match ? match[1] : 'BOM.xlsx';
-
-    document.body.appendChild(a);
-
-    a.click();
-
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
-
-    showStatus(
-      'success',
-      `✅ Successfully extracted ${allSections.length} BOM section(s). Excel download started.`
-    );
-
-  }catch(e){
-
-    console.error(e);
-
-    showStatus(
-      'error',
-      `❌ ${e.message || 'Unexpected error'}`
-    );
-
-  }finally{
+  } catch (e) {
+    log(`Fatal: ${e.message}`, 'err');
+    setPill('err', 'Error');
+  } finally {
     extractBtn.disabled = false;
   }
-};
+});
 
+/* =========================================================
+   Load script helper
+   ========================================================= */
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = res;
+    s.onerror = () => rej(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+/* =========================================================
+   Render results
+   ========================================================= */
+function renderResults() {
+  resultsArea.innerHTML = '';
+
+  if (errors.length) {
+    const box = document.createElement('div');
+    box.className = 'error-list';
+    box.innerHTML = `<h4>⚠ ${errors.length} page(s) failed</h4><ul>` +
+      errors.map(e => `<li>Page ${e.page}: ${escHtml(e.msg)}</li>`).join('') + '</ul>';
+    resultsArea.appendChild(box);
+  }
+
+  if (!allSections.length) {
+    const es = document.createElement('div');
+    es.className = 'empty-state';
+    es.innerHTML = `<div class="icon">🔍</div><h3>No BOM tables found</h3>
+      <p>No Bill of Materials was detected on the processed pages.<br/>
+      Try expanding the page range or check the drawing.</p>`;
+    resultsArea.appendChild(es);
+    setPill('err', 'No BOM found');
+    clearBtn.style.display = 'inline-flex';
+    return;
+  }
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'results-header';
+  hdr.innerHTML = `<h2>Extracted BOM · ${allSections.length} section(s)</h2>`;
+  resultsArea.appendChild(hdr);
+
+  // Sections
+  allSections.forEach((sec, idx) => {
+    const card = document.createElement('div');
+    card.className = 'bom-section';
+
+    const profiles  = sec.profiles  || [];
+    const fasteners = sec.fasteners || [];
+
+    card.innerHTML = `
+      <div class="bom-section-header">
+        <h3>${escHtml(sec.title || 'Bill of Materials')} <span style="color:var(--muted);font-size:0.7rem">— Page ${sec._page || '?'}</span></h3>
+        ${sec.unit ? `<span class="unit-tag">${escHtml(sec.unit)}</span>` : ''}
+      </div>
+
+      ${profiles.length ? `
+        <div class="sub-label">Structural Profiles (${profiles.length} items)</div>
+        <div class="bom-table-wrap">
+          <table>
+            <thead><tr>
+              <th>Mark</th><th>Qty</th><th>Profile</th><th>Length (mm)</th><th class="num">Weight (kg)</th>
+            </tr></thead>
+            <tbody>
+              ${profiles.map(p => `<tr>
+                <td><span class="mark-chip">${escHtml(String(p.mark ?? '—'))}</span></td>
+                <td>${p.qty ?? '—'}</td>
+                <td>${escHtml(String(p.profile ?? '—'))}</td>
+                <td>${p.length ?? '—'}</td>
+                <td class="num">${p.black_weight != null ? Number(p.black_weight).toFixed(2) : '—'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      ${fasteners.length ? `
+        <div class="sub-label">Fasteners (${fasteners.length} items)</div>
+        <div class="bom-table-wrap">
+          <table>
+            <thead><tr>
+              <th>Description</th><th>Qty</th><th class="num">Weight (kg)</th>
+            </tr></thead>
+            <tbody>
+              ${fasteners.map(f => `<tr>
+                <td>${escHtml(String(f.description ?? '—'))}</td>
+                <td>${f.qty ?? '—'}</td>
+                <td class="num">${f.black_weight != null ? Number(f.black_weight).toFixed(2) : '—'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <div class="bom-totals">
+        ${sec.total_profiles_weight != null ? `
+          <div class="total-item">
+            <span class="tl">Profiles Weight</span>
+            <span class="tv">${Number(sec.total_profiles_weight).toFixed(2)} kg</span>
+          </div>` : ''}
+        ${sec.total_fasteners_weight != null ? `
+          <div class="total-item">
+            <span class="tl">Fasteners Weight</span>
+            <span class="tv">${Number(sec.total_fasteners_weight).toFixed(2)} kg</span>
+          </div>` : ''}
+        ${sec.drawing_total_weight != null ? `
+          <div class="total-item grand">
+            <span class="tl">Drawing Total</span>
+            <span class="tv">${Number(sec.drawing_total_weight).toFixed(2)} kg</span>
+          </div>` : ''}
+      </div>
+    `;
+
+    resultsArea.appendChild(card);
+  });
+
+  setPill('ok', `${allSections.length} BOM(s) found`);
+  downloadBtn.style.display = 'inline-flex';
+  clearBtn.style.display = 'inline-flex';
+}
+
+/* =========================================================
+   Download Excel
+   ========================================================= */
+downloadBtn.addEventListener('click', async () => {
+  if (!allSections.length) return;
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = '⏳ Building…';
+
+  try {
+    const res = await fetch('/api/build-excel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: pdfFile?.name || 'drawing.pdf',
+        sections: allSections,
+      }),
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = (pdfFile?.name || 'BOM').replace(/\.pdf$/i, '') + '_BOM.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+    log('Excel downloaded ✓', 'ok');
+  } catch (e) {
+    log(`Excel error: ${e.message}`, 'err');
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.innerHTML = '<span>📥</span> Download Excel';
+  }
+});
+
+/* =========================================================
+   Clear
+   ========================================================= */
+clearBtn.addEventListener('click', () => {
+  pdfFile = null;
+  allSections = [];
+  errors = [];
+  fileInfo.classList.remove('visible');
+  fileInput.value = '';
+  logBox.classList.remove('visible');
+  logBox.innerHTML = '';
+  resultsArea.innerHTML = `<div class="empty-state" id="emptyState">
+    <div class="icon">🏗️</div>
+    <h3>No extraction yet</h3>
+    <p>Upload a steel tower engineering drawing PDF<br/>and click <strong>Extract BOM</strong> to begin.</p>
+  </div>`;
+  downloadBtn.style.display = 'none';
+  clearBtn.style.display = 'none';
+  extractBtn.disabled = true;
+  checkHealth();
+});
+
+/* =========================================================
+   Util
+   ========================================================= */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 </script>
-
 </body>
 </html>
