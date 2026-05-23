@@ -6,8 +6,8 @@
   <title>BOM Extractor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <!-- PDF.js for client-side PDF rendering -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+  <!-- PDF.js for client-side PDF rendering - using unpkg as fallback -->
+  <script src="https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.min.js"></script>
   <style>
     :root {
       --navy:   #1F4E79;
@@ -132,6 +132,29 @@
       font-weight: 500;
     }
 
+    .api-key-section {
+      background: #FFF9E6;
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .api-key-section label {
+      font-size: 0.8rem;
+      color: var(--navy);
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+    .api-key-section input {
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid var(--gold);
+      border-radius: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+    }
+
     .btn-primary {
       width: 100%;
       background: var(--navy);
@@ -161,6 +184,8 @@
       font-size: 0.82rem;
       line-height: 1.6;
       border: 1.5px solid;
+      max-height: 200px;
+      overflow-y: auto;
     }
     #status-box.loading { display:block; background: var(--sky); border-color: var(--blue); color: var(--navy); }
     #status-box.error   { display:block; background: #FDF0EE; border-color: var(--red); color: var(--red); }
@@ -234,329 +259,412 @@
       font-weight: 700;
       font-size: 0.78rem;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--navy);
+      letter-spacing: 0.08em;
+      color: #5a7a9a;
       margin-bottom: 0.8rem;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
+      display: block;
     }
-    .card-label .dot { width: 6px; height: 6px; background: var(--gold); border-radius: 50%; display: inline-block; }
+    .code {
+      font-family: 'DM Mono', monospace;
+      background: #f5f5f5;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
 
-    footer {
-      text-align: center;
-      font-size: 0.7rem;
-      color: #8aaac8;
-      padding: 1.2rem;
-      border-top: 1px solid var(--border);
+    @media (max-width: 640px) {
+      .steps { grid-template-columns: 1fr; }
+      main { padding: 2rem 1rem 3rem; }
     }
   </style>
 </head>
 <body>
-
-<header>
-  <div class="logo">
-    <div class="logo-icon">📐</div>
-    BOM Extractor
-  </div>
-  <span class="badge">Powered by Claude AI</span>
-</header>
-
-<main>
-  <div>
-    <h1>Extract <span>Bills of Materials</span><br>from Engineering Drawings</h1>
-    <p class="subtitle">Upload a PDF → Claude reads every BOM table → Download a formatted Excel file instantly.</p>
-  </div>
-
-  <!-- Drop zone -->
-  <div class="drop-zone" id="drop-zone">
-    <input type="file" id="file-input" accept=".pdf" onchange="onFileChosen(this)" />
-    <span class="drop-icon">📄</span>
-    <div class="drop-title">Drop your engineering drawing PDF here</div>
-    <div class="drop-sub">or click to browse &nbsp;·&nbsp; max 50 MB</div>
-    <div id="file-name" style="display:none" class="file-chosen">
-      <span>📎</span><span id="file-label"></span>
+  <header>
+    <div class="logo">
+      <div class="logo-icon">📋</div>
+      <div>BOM <span style="color: var(--gold);">Extractor</span></div>
     </div>
-  </div>
+    <span class="badge">v2.0</span>
+  </header>
 
-  <!-- Extract button -->
-  <button class="btn-primary" id="extract-btn" onclick="extract()" disabled>
-    ⚡ Extract BOM → Excel
-  </button>
+  <main>
+    <div>
+      <h1>Extract Bill of <span>Materials</span></h1>
+      <p class="subtitle">Upload an engineering drawing PDF → Claude extracts all BOM tables → download formatted Excel</p>
+    </div>
 
-  <!-- Status -->
-  <div id="status-box">
-    <div id="status-text"></div>
-    <div class="progress-container" id="progress-container">
-      <div class="progress-bar-bg">
-        <div class="progress-bar-fill" id="progress-fill"></div>
+    <!-- API Key Input (shown if not configured server-side) -->
+    <div class="api-key-section" id="api-key-section" style="display:none;">
+      <label for="api-key-input">
+        🔑 Anthropic API Key <span style="color: var(--red);">*</span>
+      </label>
+      <input 
+        type="password" 
+        id="api-key-input" 
+        placeholder="sk-ant-v0-..." 
+        title="Get your API key from https://console.anthropic.com"
+      />
+      <p style="font-size: 0.7rem; color: #666; margin-top: 0.4rem;">
+        Your key is only used in this browser session and never stored.
+        <a href="https://console.anthropic.com" target="_blank" style="color: var(--blue);">Get your API key →</a>
+      </p>
+    </div>
+
+    <!-- PDF Upload -->
+    <div class="drop-zone" id="drop-zone">
+      <span class="drop-icon">📄</span>
+      <div class="drop-title">Drop your PDF here or click to select</div>
+      <div class="drop-sub">Engineering drawings up to 50 MB</div>
+      <input type="file" accept=".pdf" onchange="window.onFileChosen(this)" />
+      <div id="file-name" class="file-chosen" style="display: none;">
+        ✓ <span id="file-label">file.pdf</span>
       </div>
-      <div class="progress-text" id="progress-text"></div>
     </div>
-  </div>
 
-  <!-- How it works -->
-  <div>
-    <div class="card-label"><span class="dot"></span> How it works</div>
+    <!-- Extract Button -->
+    <button class="btn-primary" id="extract-btn" disabled onclick="window.extract()">
+      🚀 Extract BOM
+    </button>
+
+    <!-- Status Box -->
+    <div id="status-box">
+      <span id="status-text"></span>
+      <div id="progress-container" class="progress-container">
+        <div class="progress-bar-bg">
+          <div id="progress-fill" class="progress-bar-fill"></div>
+        </div>
+        <div id="progress-text" class="progress-text"></div>
+      </div>
+    </div>
+
+    <!-- Steps -->
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
-        <div class="step-text">Upload any engineering drawing PDF with BOM tables</div>
+        <div class="step-text">Upload PDF drawing</div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div class="step-text">Claude AI reads each page and extracts every row</div>
+        <div class="step-text">Claude extracts BOM tables</div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div class="step-text">Download a clean, formatted Excel file instantly</div>
+        <div class="step-text">Download formatted Excel</div>
       </div>
     </div>
-  </div>
-</main>
+  </main>
 
-<footer>BOM Extractor &nbsp;·&nbsp; Built with FastAPI + Claude + openpyxl</footer>
-
-<script type="module">
-  // ─── PDF.js setup ──────────────────────────────────────────────────────────
-  const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
-
-  // ─── DOM refs ──────────────────────────────────────────────────────────────
-  const dropZone = document.getElementById('drop-zone');
-  const extractBtn = document.getElementById('extract-btn');
-  const statusBox = document.getElementById('status-box');
-  const statusText = document.getElementById('status-text');
-  const progressContainer = document.getElementById('progress-container');
-  const progressFill = document.getElementById('progress-fill');
-  const progressTextEl = document.getElementById('progress-text');
-  let chosenFile = null;
-
-  // ─── Drag & drop ──────────────────────────────────────────────────────────
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault(); dropZone.classList.remove('drag-over');
-    const f = e.dataTransfer.files[0];
-    if (f) setFile(f);
-  });
-
-  // ─── File selection ────────────────────────────────────────────────────────
-  window.onFileChosen = function(input) { if (input.files[0]) setFile(input.files[0]); };
-
-  function setFile(f) {
-    if (!f.name.toLowerCase().endsWith('.pdf')) { showStatus('error', '❌ Only PDF files are accepted.'); return; }
-    chosenFile = f;
-    document.getElementById('file-label').textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)';
-    document.getElementById('file-name').style.display = 'inline-flex';
-    extractBtn.disabled = false;
-    clearStatus();
-  }
-
-  function showStatus(type, msg) {
-    statusBox.className = type;
-    statusText.innerHTML = msg;
-    statusBox.style.display = 'block';
-    if (type !== 'loading') {
-      progressContainer.classList.remove('visible');
+  <script type="module">
+    // ─── Initialize PDF.js ────────────────────────────────────────────────────
+    // Wait for PDF.js to load with retries
+    function initPdfJs(retries = 10) {
+      if (typeof pdfjsLib !== 'undefined' && typeof pdfjsLib.getDocument !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.js';
+        console.log('[PDF.js] ✅ Loaded and initialized');
+        return true;
+      }
+      
+      if (retries > 0) {
+        console.log(`[PDF.js] Waiting for library... (${retries} retries left)`);
+        setTimeout(() => initPdfJs(retries - 1), 500);
+        return false;
+      }
+      
+      console.error('[PDF.js] ❌ Failed to load after retries');
+      return false;
     }
-  }
-  function clearStatus() { statusBox.style.display = 'none'; statusBox.className = ''; progressContainer.classList.remove('visible'); }
-
-  function showProgress(current, total, pageMsg) {
-    progressContainer.classList.add('visible');
-    const pct = Math.round((current / total) * 100);
-    progressFill.style.width = pct + '%';
-    progressTextEl.textContent = pageMsg || `Page ${current} of ${total}`;
-  }
-
-  // ─── Render a single PDF page to JPEG base64 ──────────────────────────────
-  async function renderPageToBase64(pdfDoc, pageNum, scale = 2.0) {
-    const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    // Try quality 0.85, but if the base64 is too large (>3MB), reduce quality
-    let quality = 0.85;
-    let dataUrl = canvas.toDataURL('image/jpeg', quality);
-    let b64 = dataUrl.split(',')[1];
-    // base64 is ~4/3 of binary, so 3MB base64 ≈ 2.25MB binary. Keep under Vercel's 4.5MB body limit.
-    while (b64.length > 3 * 1024 * 1024 && quality > 0.4) {
-      quality -= 0.15;
-      dataUrl = canvas.toDataURL('image/jpeg', quality);
-      b64 = dataUrl.split(',')[1];
+    
+    // Start initialization after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(initPdfJs, 100));
+    } else {
+      setTimeout(initPdfJs, 100);
     }
-    // If still too large, re-render at a smaller scale
-    if (b64.length > 3 * 1024 * 1024 && scale > 1.0) {
-      return renderPageToBase64(pdfDoc, pageNum, scale * 0.7);
-    }
-    return b64;
-  }
 
-  // ─── Fetch with timeout and retry ─────────────────────────────────────────
-  async function fetchWithRetry(url, options, { retries = 2, timeoutMs = 120000 } = {}) {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // ─── Check server health & API key configuration ───────────────────────
+    async function checkServerStatus() {
       try {
-        const res = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(timer);
-        if (res.ok) return res;
-        // On server error (5xx), retry
-        if (res.status >= 500 && attempt < retries) {
-          const wait = 1000 * Math.pow(2, attempt);
-          await new Promise(r => setTimeout(r, wait));
-          continue;
+        const res = await fetch('/api/health');
+        if (!res.ok) {
+          showStatus('error', '❌ Server health check failed. Server may be down.');
+          return false;
         }
-        // Return the failed response for caller to handle
-        return res;
+        const data = await res.json();
+        const apiKeyConfigured = data.api_key_configured;
+        
+        // Show API key input if not configured server-side
+        const apiKeySection = document.getElementById('api-key-section');
+        const apiKeyInput = document.getElementById('api-key-input');
+        if (!apiKeyConfigured) {
+          apiKeySection.style.display = 'block';
+          if (!apiKeyInput.value) {
+            showStatus('error', '⚠️ API key not configured server-side. Enter your Anthropic API key above.');
+          }
+        }
+        return true;
       } catch (e) {
-        clearTimeout(timer);
-        if (attempt < retries && (e.name === 'AbortError' || e.name === 'TypeError')) {
-          const wait = 1000 * Math.pow(2, attempt);
-          await new Promise(r => setTimeout(r, wait));
-          continue;
-        }
-        throw e;
+        console.error('Health check failed:', e);
+        return false;
       }
     }
-  }
 
-  // ─── Extract error detail from a failed response ──────────────────────────
-  async function getErrorDetail(res) {
-    try {
-      const data = await res.json();
-      return data.detail || data.message || data.error || JSON.stringify(data);
-    } catch {
+    // Check on load
+    window.addEventListener('load', checkServerStatus);
+
+    // ─── UI Elements ──────────────────────────────────────────────────────────
+    const extractBtn = document.getElementById('extract-btn');
+    const dropZone = document.getElementById('drop-zone');
+    const statusBox = document.getElementById('status-box');
+    const statusText = document.getElementById('status-text');
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressTextEl = document.getElementById('progress-text');
+    const apiKeyInput = document.getElementById('api-key-input');
+    let chosenFile = null;
+
+    // ─── Drag & drop ──────────────────────────────────────────────────────────
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) setFile(f);
+    });
+
+    // ─── File selection ────────────────────────────────────────────────────────
+    window.onFileChosen = function(input) { if (input.files[0]) setFile(input.files[0]); };
+
+    function setFile(f) {
+      if (!f.name.toLowerCase().endsWith('.pdf')) { showStatus('error', '❌ Only PDF files are accepted.'); return; }
+      chosenFile = f;
+      document.getElementById('file-label').textContent = f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)';
+      document.getElementById('file-name').style.display = 'inline-flex';
+      extractBtn.disabled = false;
+      clearStatus();
+    }
+
+    function showStatus(type, msg) {
+      statusBox.className = type;
+      statusText.innerHTML = msg;
+      statusBox.style.display = 'block';
+      if (type !== 'loading') {
+        progressContainer.classList.remove('visible');
+      }
+    }
+    function clearStatus() { statusBox.style.display = 'none'; statusBox.className = ''; progressContainer.classList.remove('visible'); }
+
+    function showProgress(current, total, pageMsg) {
+      progressContainer.classList.add('visible');
+      const pct = Math.round((current / total) * 100);
+      progressFill.style.width = pct + '%';
+      progressTextEl.textContent = pageMsg || `Page ${current} of ${total}`;
+    }
+
+    // ─── Render a single PDF page to JPEG base64 ──────────────────────────────
+    async function renderPageToBase64(pdfDoc, pageNum, scale = 2.0) {
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      // Try quality 0.85, but if the base64 is too large (>3MB), reduce quality
+      let quality = 0.85;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      let b64 = dataUrl.split(',')[1];
+      // base64 is ~4/3 of binary, so 3MB base64 ≈ 2.25MB binary. Keep under Vercel's 4.5MB body limit.
+      while (b64.length > 3 * 1024 * 1024 && quality > 0.4) {
+        quality -= 0.15;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+        b64 = dataUrl.split(',')[1];
+      }
+      // If still too large, re-render at a smaller scale
+      if (b64.length > 3 * 1024 * 1024 && scale > 1.0) {
+        return renderPageToBase64(pdfDoc, pageNum, scale * 0.7);
+      }
+      return b64;
+    }
+
+    // ─── Fetch with timeout and retry ─────────────────────────────────────────
+    async function fetchWithRetry(url, options, { retries = 2, timeoutMs = 120000 } = {}) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, { ...options, signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) return res;
+          // On server error (5xx), retry
+          if (res.status >= 500 && attempt < retries) {
+            const wait = 1000 * Math.pow(2, attempt);
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+          }
+          // Return the failed response for caller to handle
+          return res;
+        } catch (e) {
+          clearTimeout(timer);
+          if (attempt < retries && (e.name === 'AbortError' || e.name === 'TypeError')) {
+            const wait = 1000 * Math.pow(2, attempt);
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+          }
+          throw e;
+        }
+      }
+    }
+
+    // ─── Extract error detail from a failed response ──────────────────────────
+    async function getErrorDetail(res) {
       try {
-        const text = await res.text();
-        // Vercel often returns HTML error pages; extract useful bits
-        if (text.includes('FUNCTION_INVOCATION_TIMEOUT')) return 'Server function timed out (Vercel limit). Try a smaller PDF or upgrade your plan.';
-        if (text.includes('BODY_LIMIT')) return 'Request too large for Vercel (4.5MB limit). Page image is too big.';
-        if (text.length < 200) return text || `HTTP ${res.status}`;
-        return `HTTP ${res.status} — server returned a non-JSON error`;
+        const data = await res.json();
+        return data.detail || data.message || data.error || JSON.stringify(data);
       } catch {
-        return `HTTP ${res.status} ${res.statusText || 'error'}`;
+        try {
+          const text = await res.text();
+          // Vercel often returns HTML error pages; extract useful bits
+          if (text.includes('FUNCTION_INVOCATION_TIMEOUT')) return 'Server function timed out (Vercel limit). Try a smaller PDF or upgrade your plan.';
+          if (text.includes('BODY_LIMIT')) return 'Request too large for Vercel (4.5MB limit). Page image is too big.';
+          if (text.length < 200) return text || `HTTP ${res.status}`;
+          return `HTTP ${res.status} — server returned a non-JSON error`;
+        } catch {
+          return `HTTP ${res.status} ${res.statusText || 'error'}`;
+        }
       }
     }
-  }
 
-  // ─── Main extraction flow ─────────────────────────────────────────────────
-  window.extract = async function() {
-    if (!chosenFile) return;
-    extractBtn.disabled = true;
-    showStatus('loading', '<span class="spinner"></span> Loading PDF…');
+    // ─── Main extraction flow ─────────────────────────────────────────────────
+    window.extract = async function() {
+      if (!chosenFile) return;
+      
+      // Validate API key
+      const apiKey = apiKeyInput.value.trim();
+      const apiKeySection = document.getElementById('api-key-section');
+      if (apiKeySection.style.display !== 'none' && !apiKey) {
+        showStatus('error', '❌ Please enter your Anthropic API key above.');
+        return;
+      }
 
-    try {
-      // 1. Load PDF in browser with PDF.js
-      const arrayBuffer = await chosenFile.arrayBuffer();
-      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdfDoc.numPages;
+      extractBtn.disabled = true;
+      showStatus('loading', '<span class="spinner"></span> Loading PDF…');
 
-      showStatus('loading', `<span class="spinner"></span> PDF loaded — ${totalPages} page${totalPages > 1 ? 's' : ''} found. Analysing with Claude…`);
-      showProgress(0, totalPages, `Starting analysis of ${totalPages} pages…`);
-
-      // 2. Process each page one-by-one
-      const allSections = [];
-      const errors = [];
-
-      for (let i = 1; i <= totalPages; i++) {
-        showProgress(i, totalPages, `Analysing page ${i} of ${totalPages}…`);
-
-        // Render page to JPEG in browser
-        let imageB64;
-        try {
-          imageB64 = await renderPageToBase64(pdfDoc, i);
-        } catch (renderErr) {
-          errors.push(`Page ${i}: Failed to render — ${renderErr.message}`);
-          continue;
+      try {
+        // 1. Load PDF in browser with PDF.js
+        if (!window.pdfjsLib) {
+          throw new Error('PDF.js not loaded. Please refresh the page.');
         }
+        
+        const arrayBuffer = await chosenFile.arrayBuffer();
+        const pdfDoc = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const totalPages = pdfDoc.numPages;
 
-        // Send to server for Claude extraction (with retry + timeout)
-        try {
-          const res = await fetchWithRetry('/api/extract-page', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              page_num: i,
-              image_data: imageB64,
-              media_type: 'image/jpeg'
-            }),
-          });
+        showStatus('loading', `<span class="spinner"></span> PDF loaded — ${totalPages} page${totalPages > 1 ? 's' : ''} found. Analysing with Claude…`);
+        showProgress(0, totalPages, `Starting analysis of ${totalPages} pages…`);
 
-          if (!res.ok) {
-            const detail = await getErrorDetail(res);
-            errors.push(`Page ${i}: ${detail}`);
+        // 2. Process each page one-by-one
+        const allSections = [];
+        const errors = [];
+
+        for (let i = 1; i <= totalPages; i++) {
+          showProgress(i, totalPages, `Analysing page ${i} of ${totalPages}…`);
+
+          // Render page to JPEG in browser
+          let imageB64;
+          try {
+            imageB64 = await renderPageToBase64(pdfDoc, i);
+          } catch (renderErr) {
+            errors.push(`Page ${i}: Failed to render — ${renderErr.message}`);
             continue;
           }
 
-          const result = await res.json();
-          if (result.has_bom && result.sections) {
-            allSections.push(...result.sections);
+          // Send to server for Claude extraction (with retry + timeout)
+          try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (apiKey) {
+              headers['X-API-Key'] = apiKey;
+            }
+
+            const res = await fetchWithRetry('/api/extract-page', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                page_num: i,
+                image_data: imageB64,
+                media_type: 'image/jpeg'
+              }),
+            });
+
+            if (!res.ok) {
+              const detail = await getErrorDetail(res);
+              errors.push(`Page ${i}: ${detail}`);
+              continue;
+            }
+
+            const result = await res.json();
+            if (result.has_bom && result.sections) {
+              allSections.push(...result.sections);
+            }
+          } catch (e) {
+            const msg = e.name === 'AbortError' ? 'Request timed out after retries' : (e.message || 'Network error');
+            errors.push(`Page ${i}: ${msg}`);
           }
-        } catch (e) {
-          const msg = e.name === 'AbortError' ? 'Request timed out after retries' : (e.message || 'Network error');
-          errors.push(`Page ${i}: ${msg}`);
         }
-      }
 
-      // 3. Check if we found any BOM data
-      if (allSections.length === 0) {
-        const errMsg = errors.length > 0
-          ? `No BOM tables found. Errors: ${errors.join('; ')}`
-          : 'No BOM tables were found in any page of this PDF.';
+        // 3. Check if we found any BOM data
+        if (allSections.length === 0) {
+          const errMsg = errors.length > 0
+            ? `No BOM tables found. Errors: ${errors.join('; ')}`
+            : 'No BOM tables were found in any page of this PDF.';
+          showStatus('error', '❌ ' + errMsg);
+          extractBtn.disabled = false;
+          return;
+        }
+
+        // 4. Build Excel file on server
+        showStatus('loading', '<span class="spinner"></span> Building Excel workbook…');
+        showProgress(totalPages, totalPages, 'Generating Excel file…');
+
+        const excelRes = await fetchWithRetry('/api/build-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: chosenFile.name,
+            sections: allSections,
+          }),
+        });
+
+        if (!excelRes.ok) {
+          const detail = await getErrorDetail(excelRes);
+          showStatus('error', '❌ Excel build failed: ' + detail);
+          extractBtn.disabled = false;
+          return;
+        }
+
+        // 5. Download the Excel file
+        const blob = await excelRes.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const cd = excelRes.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="?([^"]+)"?/);
+        a.download = match ? match[1] : 'BOM.xlsx';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const warnMsg = errors.length > 0
+          ? `<br><span style="font-size:0.75rem;color:#8a6d00;">⚠️ ${errors.length} page(s) had errors and were skipped.</span>`
+          : '';
+        showStatus('success', `✅ Done! Extracted ${allSections.length} BOM section${allSections.length > 1 ? 's' : ''}. Your Excel file is downloading.${warnMsg}`);
+
+      } catch (e) {
+        const errMsg = e.name === 'AbortError' ? 'Request timed out. The server may be overloaded — try again in a moment.' : (e.message || 'An unexpected error occurred');
         showStatus('error', '❌ ' + errMsg);
+      } finally {
         extractBtn.disabled = false;
-        return;
       }
-
-      // 4. Build Excel file on server
-      showStatus('loading', '<span class="spinner"></span> Building Excel workbook…');
-      showProgress(totalPages, totalPages, 'Generating Excel file…');
-
-      const excelRes = await fetchWithRetry('/api/build-excel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: chosenFile.name,
-          sections: allSections,
-        }),
-      });
-
-      if (!excelRes.ok) {
-        const detail = await getErrorDetail(excelRes);
-        showStatus('error', '❌ Excel build failed: ' + detail);
-        extractBtn.disabled = false;
-        return;
-      }
-
-      // 5. Download the Excel file
-      const blob = await excelRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const cd = excelRes.headers.get('Content-Disposition') || '';
-      const match = cd.match(/filename="?([^"]+)"?/);
-      a.download = match ? match[1] : 'BOM.xlsx';
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      const warnMsg = errors.length > 0
-        ? `<br><span style="font-size:0.75rem;color:#8a6d00;">⚠️ ${errors.length} page(s) had errors and were skipped.</span>`
-        : '';
-      showStatus('success', `✅ Done! Extracted ${allSections.length} BOM section${allSections.length > 1 ? 's' : ''}. Your Excel file is downloading.${warnMsg}`);
-
-    } catch (e) {
-      const errMsg = e.name === 'AbortError' ? 'Request timed out. The server may be overloaded — try again in a moment.' : (e.message || 'An unexpected error occurred');
-      showStatus('error', '❌ ' + errMsg);
-    } finally {
-      extractBtn.disabled = false;
-    }
-  };
-</script>
+    };
+  </script>
 </body>
 </html>
