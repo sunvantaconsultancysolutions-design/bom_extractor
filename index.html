@@ -137,7 +137,7 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
       if (res.ok) {
         const data = await res.json();
         if (data.key) {
-          resolvedApiKey = data.key;
+          resolvedApiKey = data.key.trim().replace(/[\r\n\t]/g, '');
           console.log('[Auth] API key loaded from server');
           return;
         }
@@ -185,11 +185,12 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
   }
 
   async function callClaude(apiKey, pageNum, imageB64) {
+    const cleanKey = apiKey.trim().replace(/[\r\n\t]/g, '');
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': cleanKey,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
