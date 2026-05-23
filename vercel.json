@@ -3,13 +3,25 @@
   "builds": [
     {
       "src": "main.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
     {
+      "src": "/favicon.ico",
+      "dest": "main.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "main.py"
     }
-  ]
+  ],
+  "functions": {
+    "main.py": {
+      "maxDuration": 300
+    }
+  }
 }
