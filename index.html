@@ -7,11 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    :root {
-      --navy:#1F4E79;--blue:#2E75B6;--sky:#D6E4F0;--gold:#F4B942;
-      --ink:#0D1B2A;--mist:#F0F5FA;--white:#FFFFFF;--border:#C8DAED;
-      --red:#C0392B;--green:#1A7A4A;
-    }
+    :root{--navy:#1F4E79;--blue:#2E75B6;--sky:#D6E4F0;--gold:#F4B942;--ink:#0D1B2A;--mist:#F0F5FA;--white:#FFFFFF;--border:#C8DAED;--red:#C0392B;--green:#1A7A4A;}
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'DM Mono',monospace;background:var(--mist);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
     header{background:var(--navy);padding:0 2.5rem;display:flex;align-items:center;justify-content:space-between;height:64px;border-bottom:3px solid var(--gold);}
@@ -22,9 +18,6 @@
     h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(1.8rem,4vw,2.6rem);color:var(--navy);line-height:1.1;letter-spacing:-0.04em;}
     h1 span{color:var(--blue);}
     .subtitle{font-size:0.82rem;color:#5a7a9a;margin-top:0.5rem;line-height:1.6;}
-    .api-key-section{background:#FFF9E6;border:1px solid var(--gold);border-radius:10px;padding:1rem;}
-    .api-key-section label{font-size:0.8rem;color:var(--navy);font-weight:600;display:block;margin-bottom:0.4rem;}
-    .api-key-section input{width:100%;padding:0.6rem;border:1px solid var(--gold);border-radius:6px;font-family:'DM Mono',monospace;font-size:0.8rem;}
     .drop-zone{border:2px dashed var(--border);border-radius:14px;background:var(--white);padding:4rem 2rem;text-align:center;cursor:pointer;transition:all 0.25s;position:relative;}
     .drop-zone:hover,.drop-zone.drag-over{border-color:var(--blue);background:#EBF3FB;}
     .drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
@@ -35,7 +28,7 @@
     .btn-primary{width:100%;background:var(--navy);color:var(--white);border:none;border-radius:10px;padding:1.1rem;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;letter-spacing:0.04em;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:0.6rem;}
     .btn-primary:hover:not(:disabled){background:var(--blue);transform:translateY(-1px);}
     .btn-primary:disabled{opacity:0.45;cursor:not-allowed;}
-    #status-box{display:none;border-radius:10px;padding:1.1rem 1.3rem;font-size:0.82rem;line-height:1.6;border:1.5px solid;max-height:200px;overflow-y:auto;}
+    #status-box{display:none;border-radius:10px;padding:1.1rem 1.3rem;font-size:0.82rem;line-height:1.6;border:1.5px solid;max-height:220px;overflow-y:auto;}
     #status-box.loading{display:block;background:var(--sky);border-color:var(--blue);color:var(--navy);}
     #status-box.error{display:block;background:#FDF0EE;border-color:var(--red);color:var(--red);}
     #status-box.success{display:block;background:#EAF7EF;border-color:var(--green);color:var(--green);}
@@ -64,15 +57,6 @@
   <div>
     <h1>Extract <span>Bills of Materials</span><br>from Engineering Drawings</h1>
     <p class="subtitle">Upload a PDF → Claude reads every BOM table → Download a formatted Excel file instantly.</p>
-  </div>
-
-  <div class="api-key-section" id="api-key-section" style="display:none;">
-    <label for="api-key-input">🔑 Anthropic API Key <span style="color:var(--red);">*</span></label>
-    <input type="password" id="api-key-input" placeholder="sk-ant-..." />
-    <p style="font-size:0.7rem;color:#666;margin-top:0.4rem;">
-      Your key is used only in this browser session and never stored.
-      <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue);">Get your API key →</a>
-    </p>
   </div>
 
   <div class="drop-zone" id="drop-zone">
@@ -105,51 +89,21 @@
 <footer>BOM Extractor · Built with FastAPI + Claude + openpyxl</footer>
 
 <script type="module">
-  const SYSTEM_PROMPT = `You are an expert engineering drawing parser specialising in steel tower Bills of Materials (BOM).
-Given a page image from an engineering drawing, extract ALL BOM tables visible on the page.
-Return ONLY a valid JSON object (no markdown, no explanation) with this structure:
-{"sections":[{"title":"BILL OF MATERIALS FOR (CAGE-1)","unit":"QTY. PER (TOWER)","profiles":[{"mark":"100H","qty":2,"profile":"L 90x6 H","length":4981,"black_weight":82.66}],"fasteners":[{"description":"M 16x40","qty":184,"black_weight":28.46}],"total_profiles_weight":5100.80,"total_fasteners_weight":210.83,"drawing_total_weight":5311.62}],"has_bom":true}
-If no BOM table is found return: {"has_bom":false,"sections":[]}
-Rules: Extract every row. length is mm (integer), black_weight is kg (float). Empty cells = null. Preserve exact mark/description text.`;
+  let pdfjsLib, chosenFile;
 
-  let pdfjsLib, chosenFile, resolvedApiKey = '';
-
-  // Load PDF.js
   try {
     pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
   } catch(e) { console.error('PDF.js failed:', e); }
 
-  const dropZone = document.getElementById('drop-zone');
+  const dropZone   = document.getElementById('drop-zone');
   const extractBtn = document.getElementById('extract-btn');
-  const statusBox = document.getElementById('status-box');
+  const statusBox  = document.getElementById('status-box');
   const statusText = document.getElementById('status-text');
   const progressContainer = document.getElementById('progress-container');
-  const progressFill = document.getElementById('progress-fill');
-  const progressTextEl = document.getElementById('progress-text');
-  const apiKeyInput = document.getElementById('api-key-input');
-  const apiKeySection = document.getElementById('api-key-section');
+  const progressFill      = document.getElementById('progress-fill');
+  const progressTextEl    = document.getElementById('progress-text');
 
-  // Try to fetch API key from server env variable
-  async function loadApiKey() {
-    try {
-      const res = await fetch('/api/get-key');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.key) {
-          resolvedApiKey = data.key.trim().replace(/[\r\n\t]/g, '');
-          console.log('[Auth] API key loaded from server');
-          return;
-        }
-      }
-    } catch(e) {}
-    // Key not on server — show input field
-    apiKeySection.style.display = 'block';
-    console.log('[Auth] No server key — showing input field');
-  }
-  await loadApiKey();
-
-  // Drag & drop
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
   dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
@@ -164,7 +118,10 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
     clearStatus();
   }
 
-  function showStatus(type, msg) { statusBox.className=type; statusText.innerHTML=msg; statusBox.style.display='block'; if(type!=='loading') progressContainer.classList.remove('visible'); }
+  function showStatus(type, msg) {
+    statusBox.className = type; statusText.innerHTML = msg; statusBox.style.display = 'block';
+    if (type !== 'loading') progressContainer.classList.remove('visible');
+  }
   function clearStatus() { statusBox.style.display='none'; statusBox.className=''; progressContainer.classList.remove('visible'); }
   function showProgress(cur, tot, msg) {
     progressContainer.classList.add('visible');
@@ -177,49 +134,30 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
     const vp = page.getViewport({scale});
     const canvas = document.createElement('canvas');
     canvas.width = vp.width; canvas.height = vp.height;
-    await page.render({canvasContext:canvas.getContext('2d'), viewport:vp}).promise;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
     let q=0.85, dataUrl=canvas.toDataURL('image/jpeg',q), b64=dataUrl.split(',')[1];
     while (b64.length > 3*1024*1024 && q > 0.4) { q-=0.15; dataUrl=canvas.toDataURL('image/jpeg',q); b64=dataUrl.split(',')[1]; }
     if (b64.length > 3*1024*1024 && scale > 1.0) return renderPage(pdfDoc, pageNum, scale*0.7);
     return b64;
   }
 
-  async function callClaude(apiKey, pageNum, imageB64) {
-    const cleanKey = apiKey.trim().replace(/[\r\n\t]/g, '');
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+  async function extractPage(pageNum, imageB64) {
+    const res = await fetch('/api/extract-page', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cleanKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [{role:'user', content:[
-          {type:'image', source:{type:'base64', media_type:'image/jpeg', data:imageB64}},
-          {type:'text', text:`Extract all BOM tables from page ${pageNum}.`}
-        ]}]
-      })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({page_num: pageNum, image_data: imageB64, media_type: 'image/jpeg'})
     });
     if (!res.ok) {
-      const err = await res.json().catch(()=>({}));
-      throw new Error(err?.error?.message || `API error ${res.status}`);
+      let detail = `HTTP ${res.status}`;
+      try { const d = await res.json(); detail = d.detail || detail; } catch {}
+      throw new Error(detail);
     }
-    const data = await res.json();
-    let raw = data.content[0].text.trim();
-    if (raw.startsWith('```')) { raw=raw.split('```')[1]; if(raw.startsWith('json')) raw=raw.slice(4).trimStart(); }
-    return JSON.parse(raw);
+    return res.json();
   }
 
   window.extract = async function() {
     if (!chosenFile) return;
     if (!pdfjsLib?.getDocument) { showStatus('error','❌ PDF.js failed to load. Refresh and try again.'); return; }
-
-    const apiKey = resolvedApiKey || apiKeyInput.value.trim();
-    if (!apiKey) { showStatus('error','❌ Please enter your Anthropic API key above.'); return; }
 
     extractBtn.disabled = true;
     showStatus('loading','<span class="spinner"></span> Loading PDF…');
@@ -238,7 +176,7 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
         try { b64 = await renderPage(pdfDoc, i); }
         catch(e) { errors.push(`Page ${i}: render failed — ${e.message}`); continue; }
         try {
-          const result = await callClaude(apiKey, i, b64);
+          const result = await extractPage(i, b64);
           if (result.has_bom && result.sections) allSections.push(...result.sections);
         } catch(e) { errors.push(`Page ${i}: ${e.message}`); }
       }
@@ -251,9 +189,13 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
       showStatus('loading','<span class="spinner"></span> Building Excel workbook…');
       const excelRes = await fetch('/api/build-excel', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({filename:chosenFile.name, sections:allSections})
+        body: JSON.stringify({filename: chosenFile.name, sections: allSections})
       });
-      if (!excelRes.ok) { showStatus('error','❌ Excel build failed: HTTP '+excelRes.status); extractBtn.disabled=false; return; }
+      if (!excelRes.ok) {
+        let detail = `HTTP ${excelRes.status}`;
+        try { const d = await excelRes.json(); detail = d.detail || detail; } catch {}
+        showStatus('error','❌ Excel build failed: '+detail); extractBtn.disabled=false; return;
+      }
 
       const blob = await excelRes.blob();
       const url = URL.createObjectURL(blob);
@@ -264,7 +206,7 @@ Rules: Extract every row. length is mm (integer), black_weight is kg (float). Em
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      const warn = errors.length ? `<br><span style="font-size:0.75rem;color:#8a6d00;">⚠️ ${errors.length} page(s) skipped.</span>` : '';
+      const warn = errors.length?`<br><span style="font-size:0.75rem;color:#8a6d00;">⚠️ ${errors.length} page(s) skipped.</span>`:'';
       showStatus('success',`✅ Done! Extracted ${allSections.length} BOM section${allSections.length>1?'s':''}. Downloading Excel.${warn}`);
     } catch(e) {
       showStatus('error','❌ '+(e.message||'Unexpected error'));
